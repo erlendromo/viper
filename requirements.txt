@@ -9,7 +9,8 @@ scikit-learn
 opencv-python
 pillow
 matplotlib
-transformers        # SigLIP2
-huggingface_hub     # MegaLoc (torch.hub code)
-safetensors         # MegaLoc (torch.hub code)
-pytorch_lightning   # SALAD (torch.hub code)
+transformers            # SigLIP2
+huggingface_hub         # MegaLoc (torch.hub code)
+safetensors             # MegaLoc (torch.hub code)
+pytorch_lightning       # SALAD (torch.hub code)
+pytorch-metric-learning # SALAD (torch.hub code)

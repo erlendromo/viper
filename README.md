@@ -32,7 +32,7 @@ viper/
   siglip/               SigLIP2 text and image embeddings, fusion with MegaLoc
   training/             fine-tuning with pairs derived from the camera poses
   utils/                data, ground truth, metrics, evaluation, statistics, and the
-                        compare, summary and pose-map commands
+                        compare, summary, pose-map and pose-check commands
 ```
 
 All code lives inside the `viper` package. The torch.hub repositories of the models put their own top-level modules (for example `utils` and `models` in SALAD) on the import path while loading, so generic top-level package names would clash with them.
@@ -45,10 +45,11 @@ Tested with Python 3.14, PyTorch 2.14 and CUDA 13.0 on one GPU.
 python -m venv .venv
 source .venv/bin/activate
 # install PyTorch and torchvision for your CUDA version (https://pytorch.org), then:
+pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-The model weights are downloaded on first use: AnyLoc (DINOv2), SALAD and MegaLoc through torch.hub, SigLIP2 from Hugging Face. SALAD loads the DINOv2 ViT-B/14 weights from `dl.fbaipublicfiles.com`. If that download fails, place `dinov2_vitb14_pretrain.pth` in `~/.cache/torch/hub/checkpoints/`.
+The model weights are downloaded on first use: AnyLoc (DINOv2), SALAD and MegaLoc through torch.hub, SigLIP2 from Hugging Face. SALAD loads the DINOv2 ViT-B/14 weights from `dl.fbaipublicfiles.com`. If that download fails, place `dinov2_vitb14_pretrain.pth` in `~/.cache/torch/hub/checkpoints/` (can be downloaded from [www.kaggle.com](https://www.kaggle.com/datasets/devchopin/dinov2-vit-pretrain)).
 
 ## Data
 
@@ -64,7 +65,7 @@ data/
     IHM_full_with_queries-fixed_v2.json
 ```
 
-- **Poses:** each file holds a 3×4 matrix [R | t] that maps world coordinates to camera coordinates. The camera position is −Rᵀt and the viewing direction is the third row of R. The unit is meters (checked against the hull dimensions and the deck spacing, see `python main.py pose-map`).
+- **Poses:** each file holds a 3×4 matrix [R | t] that maps world coordinates to camera coordinates. The camera position is −Rᵀt and the viewing direction is the third row of R. The unit is meters (checked against the hull dimensions and the deck spacing, see `python main.py pose-check` and `pose-map`).
 - **IHM json:** a list of items. The fields used are `image_paths` (the photographs), `gt_image_ids` (the annotated scan frames, by the number in their file name), `search_query` (the text) and the descriptive fields `Item`, `Location`, `Hazardous materials`, `Name of equipment` and `Component`.
 - **Test only:** the IHM photographs are only used for testing. Training uses scan frames only.
 
@@ -128,6 +129,7 @@ Every command prints its options with `python main.py <command> --help`.
 | `compare` | paired comparison of finished runs |
 | `summary` | the summary table of a `run_all.sh` folder |
 | `pose-map` | the camera trajectory by deck, and the scale check of the poses |
+| `pose-check` | sanity check of the pose files: rotation, world-to-camera convention, scale and deck levels |
 
 Examples:
 
