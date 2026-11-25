@@ -18,6 +18,7 @@ Files: dataset_stats.json and dataset_stats.png. Needs no GPU and no models.
 """
 import json
 import os
+import re
 from collections import Counter
 
 import numpy as np
@@ -29,6 +30,7 @@ from .trajectory import add_deck_arguments, decks_from_args
 HELP = "statistics of the scan, the IHM items and the ground truth (dataset_stats.json)"
 
 RADII = [0.5, 1.0, 2.0]
+ACRONYMS = {"PCB", "PCBS", "HBCDD", "PFOS", "ODS", "SCCP", "PCN", "TBT"}
 COLOURS = ["#014693", "#3CBFBE", "#ED8013", "#B01B81"]
 
 
@@ -72,8 +74,15 @@ def material(item):
 
 
 def named_deck(item):
-    """The deck in the IHM location, e.g. "Upper Deck, Galley" -> "Upper Deck"."""
-    return str(item.get("Location") or "unknown").split(",")[0].strip()
+    """The deck in the IHM location, e.g. "Upper Deck /Galley" -> "Upper Deck"."""
+    deck = re.split(r"[/,]", str(item.get("Location") or "unknown"))[0]
+    deck = " ".join(deck.split()).replace("Through out", "Throughout")
+    return deck[:1].upper() + deck[1:].lower() if deck.isupper() else deck
+
+
+def display_name(material_name):
+    """ASBESTOS -> Asbestos, PCB stays PCB."""
+    return material_name if material_name in ACRONYMS else material_name.capitalize()
 
 
 def photo_counts(data):
@@ -238,7 +247,7 @@ def plot(data, evaluated, stats, out_dir):
     y = np.arange(len(rows))
     mat_ax.barh(y + 0.2, [r["all_items"] for r in rows], height=0.4, color="#B0B0B0", label="all items")
     mat_ax.barh(y - 0.2, [r["evaluated_items"] for r in rows], height=0.4, color=COLOURS[0], label="evaluated")
-    mat_ax.set_yticks(y, [r["name"] for r in rows], fontsize=8)
+    mat_ax.set_yticks(y, [display_name(r["name"]) for r in rows], fontsize=8)
     mat_ax.set_xlabel("items")
     mat_ax.legend(fontsize=7, frameon=False)
 
@@ -246,9 +255,9 @@ def plot(data, evaluated, stats, out_dir):
         ax.yaxis.set_major_locator(MaxNLocator(integer=True))
 
     mat_ax.xaxis.set_major_locator(MaxNLocator(integer=True))
-    
+
     for ax in (photos_ax, gt_ax, mat_ax):
         for spine in ("top", "right"):
             ax.spines[spine].set_visible(False)
-            
+
     fig.savefig(os.path.join(out_dir, "dataset_stats.png"), dpi=200, bbox_inches="tight")
