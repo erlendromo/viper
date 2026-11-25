@@ -11,3 +11,4 @@ runs_final/
 *.env
 
 dinov2_vitb14_pretrain.pth
+run_all.log
