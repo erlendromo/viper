@@ -22,15 +22,12 @@ import os
 import numpy as np
 
 from .dataset import load_items
-from .files import file_id
-from .poses import camera_from_matrix
+from .trajectory import add_deck_arguments, camera_centres, decks_from_args, load_pose_matrices
 
 HELP = "map of the scan trajectory by deck, with the scale check (pose_stats.json)"
 
 LEVEL_COLOURS = ["#014693", "#3CBFBE", "#ED8013", "#B01B81", "#7A8F00", "#575757", "#F7D019", "#8C564B"]
 OUTSIDE_COLOUR = "#B0B0B0"
-HISTOGRAM_BIN = 0.05              # meters
-HISTOGRAM_SMOOTHING = 3           # bins (sigma 15 cm)
 MAX_STEP = 1.0                    # steps longer than this are jumps between passes, not walking
 
 
@@ -38,26 +35,22 @@ def add_arguments(parser):
     parser.add_argument("--db-poses", required=True, help="folder with the pose files")
     parser.add_argument("--out", required=True, help="output folder")
     parser.add_argument("--json", help="IHM json: annotated scan images are drawn as markers")
-    parser.add_argument("--up-axis", type=int, default=2, choices=[0, 1, 2], help="vertical world axis (default 2)")
-    parser.add_argument("--decks", type=int, default=0, help="force this number of deck levels (default: detect)")
-    parser.add_argument("--deck-min-gap", type=float, default=1.2, help="smallest height difference between two decks")
-    parser.add_argument("--deck-min-share", type=float, default=0.02, help="a level needs at least this share of the frames")
-    parser.add_argument("--hull-half-width", type=float, default=6.0, help="frames further than this from the centre line count as outside the hull")
+    add_deck_arguments(parser)
     parser.add_argument("--unit", default="m", help="unit written on the axes")
 
 
 def run(args):
     os.makedirs(args.out, exist_ok=True)
-    ids, centres = load_camera_centres(args.db_poses)
+    ids, matrices = load_pose_matrices(args.db_poses)
+    centres = camera_centres(matrices)
     print(f"[poses] {len(ids)} poses, ids {ids.min()}..{ids.max()}")
     first_file = sorted(glob.glob(os.path.join(args.db_poses, "**", "*.txt"), recursive=True))[0]
     det = np.linalg.det(np.loadtxt(first_file)[:3, :3])
 
-    along, across, height, angle = ship_frame(centres, args.up_axis)
-    outside = np.abs(across - np.median(across)) > args.hull_half_width
+    d = decks_from_args(centres, args)
+    along, across, height, angle = d["along"], d["across"], d["height"], d["angle"]
+    outside, levels, deck = d["outside"], d["levels"], d["deck"]
     inside = ~outside
-    levels = deck_levels(height[inside], args.decks, args.deck_min_gap, args.deck_min_share)
-    deck = np.abs(height[:, None] - levels[None]).argmin(1)
 
     stats = statistics(ids, centres, along, across, height, angle, det, levels, deck, outside, args.hull_half_width)
     annotated = None
@@ -77,68 +70,9 @@ def run(args):
     print(f"saved {os.path.join(args.out, 'pose_map.png')} and pose_stats.json")
 
 
-def load_camera_centres(folder):
-    """Frame ids and camera centres of all readable pose files, sorted by frame id."""
-    files = sorted((f for f in glob.glob(os.path.join(folder, "**", "*.txt"), recursive=True) if file_id(f) is not None), key=file_id)
-    ids, centres, unreadable = [], [], 0
-
-    for path in files:
-        try:
-            matrix = np.loadtxt(path)
-            if not np.isfinite(matrix[:3]).all():
-                raise ValueError
-            
-            centre, _ = camera_from_matrix(matrix)
-        except Exception:
-            unreadable += 1
-            continue
-
-        ids.append(file_id(path))
-        centres.append(centre)
-
-    if not ids:
-        raise SystemExit(f"no readable pose files in {folder}")
-    
-    if unreadable:
-        print(f"[poses] {unreadable} files could not be read and were skipped")
-
-    return np.array(ids), np.array(centres)
-
-
-def ship_frame(centres, up_axis):
-    """Coordinates along the ship, across it and in height, and the angle of the ship axis to the first world axis."""
-    horizontal = centres[:, [i for i in range(3) if i != up_axis]]
-    middle = np.median(horizontal, axis=0)
-    _, _, axes = np.linalg.svd(horizontal - middle, full_matrices=False)
-    along, across = (horizontal - middle) @ axes[0], (horizontal - middle) @ axes[1]
-    angle = float(np.degrees(np.arctan2(abs(axes[0][1]), abs(axes[0][0]))))
-
-    return along, across, centres[:, up_axis], angle
-
-
-def deck_levels(height, n_decks, min_gap, min_share):
-    """Deck heights, lowest first: peaks of the smoothed height histogram, or k-means with n_decks levels."""
-    if n_decks:
-        from sklearn.cluster import KMeans
-        return np.sort(KMeans(n_decks, n_init=10, random_state=0).fit(height[:, None]).cluster_centers_[:, 0])
-    
-    from scipy.ndimage import gaussian_filter1d
-    from scipy.signal import find_peaks
-
-    edges = np.arange(height.min() - 0.5, height.max() + 0.55, HISTOGRAM_BIN)
-    counts, _ = np.histogram(height, edges)
-    smooth = gaussian_filter1d(counts.astype(float), HISTOGRAM_SMOOTHING)
-    peaks, _ = find_peaks(smooth, distance=int(min_gap / HISTOGRAM_BIN), prominence=smooth.max() * 0.08)
-    levels = ((edges[:-1] + edges[1:]) / 2)[peaks]
-    nearest = np.abs(height[:, None] - levels[None]).argmin(1)
-
-    return levels[[k for k in range(len(levels)) if (nearest == k).mean() >= min_share]]     # drop tiny peaks
-
-
 def annotated_ids(json_path):
     """All gt_image_ids in the IHM json, as a set of ints."""
     ids = set()
-
     for item in load_items(json_path):
         for x in item.get("gt_image_ids", []) or []:
             try:
@@ -212,6 +146,7 @@ def plot(along, across, height, levels, deck, outside, annotated, unit, out_dir)
     if annotated is not None and annotated.any():
         for axis, y in ((top, across), (side, height)):
             axis.scatter(along[annotated], y[annotated], s=14, marker="x", color="black", linewidths=0.8, zorder=5)
+
         side.scatter([], [], s=18, marker="x", color="black", linewidths=0.8, label=f"Annotated scan image ({annotated.sum()})")
 
     top.set_aspect("equal")
@@ -237,7 +172,7 @@ def plot(along, across, height, levels, deck, outside, annotated, unit, out_dir)
 def print_summary(stats, hull_half_width, with_annotations):
     s = stats
     print(f"[check] det R = {s['det_R_first']:.6f} (a rotation has 1), median step between frames {s['median_step_between_frames']}")
-    
+
     for label, key in (("all frames:       ", "extent_all"), ("inside the hull:  ", "extent_inside_hull")):
         e = s[key]
         print(f"[extent] {label} along {e['along']}, across {e['across']}, height {e['height']}")

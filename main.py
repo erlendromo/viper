@@ -11,7 +11,7 @@ from viper.megaloc import command as megaloc
 from viper.salad import command as salad
 from viper.siglip import command as siglip
 from viper.training import command as train
-from viper.utils import compare, pose_map, summary
+from viper.utils import compare, pose_check, pose_map, summary
 
 # command name -> module with HELP, add_arguments(parser) and run(args)
 COMMANDS = {
@@ -23,6 +23,7 @@ COMMANDS = {
     "compare": compare,
     "summary": summary,
     "pose-map": pose_map,
+    "pose-check": pose_check,
 }
 
 
