@@ -32,8 +32,8 @@ viper/
   siglip/               SigLIP2 text and image embeddings, fusion with MegaLoc
   training/             fine-tuning with pairs derived from the camera poses
   utils/                data, ground truth, metrics, evaluation, statistics, and the
-                        compare, summary, pose-map, pose-check and
-                        dataset-stats commands
+                        compare, summary, pose-map, pose-check,
+                        dataset-stats and run-info commands
 ```
 
 All code lives inside the `viper` package. The torch.hub repositories of the models put their own top-level modules (for example `utils` and `models` in SALAD) on the import path while loading, so generic top-level package names would clash with them.
@@ -132,6 +132,7 @@ Every command prints its options with `python main.py <command> --help`.
 | `pose-map` | the camera trajectory by deck, and the scale check of the poses |
 | `pose-check` | sanity check of the pose files: rotation, world-to-camera convention, scale and deck levels |
 | `dataset-stats` | statistics of the scan, the IHM items and photographs, and the ground truth |
+| `run-info` | environment, run time, disk space and training statistics of a finished `run_all.sh` folder |
 
 Examples:
 
